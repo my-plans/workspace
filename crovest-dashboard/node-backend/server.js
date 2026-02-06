@@ -80,6 +80,20 @@ db.serialize(() => {
     last_error TEXT,
     last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
+  
+  // Seed sample data if empty
+  db.get("SELECT COUNT(*) as c FROM todos", [], (e, r) => {
+    if (r && r.c === 0) {
+      db.run(`INSERT INTO todos (title, description, status, priority) VALUES 
+        ('Optimize backtesting module', 'Improve performance of historical data analysis', 'active', 1),
+        ('Add risk management rules', 'Implement stop-loss and position sizing', 'active', 2),
+        ('Update API documentation', 'Document all endpoints for client integration', 'active', 3),
+        ('Deploy dashboard to Vercel', 'Make dashboard live and accessible', 'active', 1)`);
+      db.run(`INSERT INTO decisions (decision, context) VALUES 
+        ('Use SQLite for MVP', 'Fastest to implement, will migrate to Postgres later'),
+        ('Deploy on Vercel', 'Free tier, auto-deploy from GitHub')`);
+    }
+  });
 });
 
 // Health check
