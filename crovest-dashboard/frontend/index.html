@@ -8,7 +8,7 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
         .container { max-width: 1200px; margin: 0 auto; padding: 40px 20px; }
-        header { margin-bottom: 48px; }
+        header { margin-bottom: 48px; display: flex; justify-content: space-between; align-items: center; }
         h1 { font-size: 2.5rem; font-weight: 700; background: linear-gradient(135deg, #3b82f6, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         .subtitle { color: #64748b; margin-top: 8px; }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
@@ -19,15 +19,51 @@
         .loading { animation: pulse 1.5s ease-in-out infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         .error { color: #ef4444; }
-        .api-url { background: #0f172a; padding: 12px; border-radius: 8px; font-family: monospace; font-size: 0.875rem; color: #22c55e; word-break: break-all; margin-top: 16px; }
+        
+        /* Todo list styles */
+        .todo-list { list-style: none; margin-top: 16px; }
+        .todo-item { 
+            display: flex; align-items: center; gap: 12px; 
+            padding: 12px; background: #0f172a; 
+            border-radius: 8px; margin-bottom: 8px;
+        }
+        .todo-item input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; }
+        .todo-item span { flex: 1; }
+        .todo-item.done span { text-decoration: line-through; color: #64748b; }
+        .todo-item button { 
+            background: #ef4444; color: white; border: none; 
+            padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 0.75rem;
+        }
+        .todo-item button:hover { background: #dc2626; }
+        
+        /* Add todo form */
+        .add-todo { display: flex; gap: 8px; margin-top: 16px; }
+        .add-todo input { 
+            flex: 1; padding: 12px; background: #0f172a; 
+            border: 1px solid #334155; border-radius: 8px; 
+            color: #e2e8f0; font-size: 1rem;
+        }
+        .add-todo button { 
+            padding: 12px 24px; background: #3b82f6; color: white; 
+            border: none; border-radius: 8px; cursor: pointer; font-weight: 600;
+        }
+        .add-todo button:hover { background: #2563eb; }
+        
+        .priority-high { color: #ef4444; }
+        .priority-medium { color: #f59e0b; }
+        .priority-low { color: #22c55e; }
+        
         footer { margin-top: 48px; text-align: center; color: #475569; font-size: 0.875rem; }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🌾 Crovest Dashboard</h1>
-            <p class="subtitle">Farm & Bot Management System</p>
+            <div>
+                <h1>🌾 Crovest Dashboard</h1>
+                <p class="subtitle">Farm & Bot Management System</p>
+            </div>
+            <div id="connection-status" style="color: #64748b; font-size: 0.875rem;">Checking...</div>
         </header>
         
         <div class="grid">
@@ -49,8 +85,14 @@
         </div>
         
         <div class="card" style="margin-top: 24px;">
-            <h2>API Endpoint</h2>
-            <div class="api-url" id="api-url">Loading...</div>
+            <h2>📋 Todo List</h2>
+            <ul id="todo-list" class="todo-list">
+                <li class="loading">Loading...</li>
+            </ul>
+            <form class="add-todo" onsubmit="addTodo(event)">
+                <input type="text" id="new-todo" placeholder="Add a new task..." required>
+                <button type="submit">Add</button>
+            </form>
         </div>
         
         <footer>
@@ -60,8 +102,6 @@
     
     <script>
         const API_URL = window.location.origin + '/api';
-        
-        document.getElementById('api-url').textContent = API_URL;
         
         async function fetchDashboard() {
             try {
@@ -78,8 +118,8 @@
                 document.getElementById('status').textContent = '✓';
                 document.getElementById('status').style.color = '#22c55e';
                 document.getElementById('status-text').textContent = 'Connected';
+                document.getElementById('connection-status').textContent = '🟢 Live';
             } catch (err) {
-                console.error('Failed to fetch:', err);
                 document.getElementById('todos-count').textContent = '?';
                 document.getElementById('todos-count').classList.remove('loading');
                 document.getElementById('decisions-count').textContent = '?';
@@ -87,10 +127,97 @@
                 document.getElementById('status').textContent = '✗';
                 document.getElementById('status').style.color = '#ef4444';
                 document.getElementById('status-text').textContent = 'Offline';
+                document.getElementById('connection-status').textContent = '🔴 Offline';
+            }
+        }
+        
+        async function fetchTodos() {
+            try {
+                const res = await fetch(API_URL + '/todos');
+                if (!res.ok) throw new Error('Failed to fetch');
+                const todos = await res.json();
+                renderTodos(todos);
+            } catch (err) {
+                document.getElementById('todo-list').innerHTML = '<li class="error">Failed to load todos</li>';
+            }
+        }
+        
+        function renderTodos(todos) {
+            const list = document.getElementById('todo-list');
+            if (todos.length === 0) {
+                list.innerHTML = '<li style="color: #64748b; text-align: center; padding: 20px;">No todos yet. Add one above!</li>';
+                return;
+            }
+            list.innerHTML = todos.map(todo => `
+                <li class="todo-item ${todo.status === 'done' ? 'done' : ''}">
+                    <input type="checkbox" ${todo.status === 'done' ? 'checked' : ''} 
+                           onchange="toggleTodo(${todo.id}, '${todo.status === 'done' ? 'active' : 'done'}')">
+                    <span>${escapeHtml(todo.title)}</span>
+                    <span class="priority-${getPriority(todo.priority)}">●</span>
+                    <button onclick="deleteTodo(${todo.id})">Delete</button>
+                </li>
+            `).join('');
+        }
+        
+        function getPriority(p) {
+            if (p === 1) return 'high';
+            if (p === 2) return 'medium';
+            return 'low';
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        async function addTodo(e) {
+            e.preventDefault();
+            const input = document.getElementById('new-todo');
+            const title = input.value.trim();
+            if (!title) return;
+            
+            try {
+                await fetch(API_URL + '/todos', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, priority: 2 })
+                });
+                input.value = '';
+                fetchTodos();
+                fetchDashboard();
+            } catch (err) {
+                alert('Failed to add todo');
+            }
+        }
+        
+        async function toggleTodo(id, status) {
+            try {
+                await fetch(API_URL + '/todos/' + id, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status })
+                });
+                fetchTodos();
+                fetchDashboard();
+            } catch (err) {
+                alert('Failed to update todo');
+            }
+        }
+        
+        async function deleteTodo(id) {
+            if (!confirm('Delete this task?')) return;
+            try {
+                await fetch(API_URL + '/todos/' + id, { method: 'DELETE' });
+                fetchTodos();
+                fetchDashboard();
+            } catch (err) {
+                alert('Failed to delete todo');
             }
         }
         
         fetchDashboard();
+        fetchTodos();
     </script>
 </body>
 </html>
