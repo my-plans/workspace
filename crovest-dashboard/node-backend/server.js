@@ -5,12 +5,16 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 8000;
-const DB_PATH = path.join(__dirname, '..', 'crovest.db');
+// Use /tmp for SQLite on Vercel (read-only filesystem), local path for dev
+const DB_PATH = process.env.VERCEL ? '/tmp/crovest.db' : path.join(__dirname, '..', 'crovest.db');
 
 app.use(cors());
 app.use(express.json());
 
-const db = new sqlite3.Database(DB_PATH);
+const db = new sqlite3.Database(DB_PATH, (err) => {
+  if (err) console.error('Database open error:', err.message);
+  else console.log('Connected to SQLite at', DB_PATH);
+});
 db.serialize(() => {
   // Todos table
   db.run(`CREATE TABLE IF NOT EXISTS todos (
