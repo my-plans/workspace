@@ -1,0 +1,46 @@
+Create a complete Crovest Command Center MVP dashboard.
+
+PROJECT STRUCTURE:
+- backend/ with FastAPI + SQLite
+- frontend/ with React PWA
+
+BACKEND (FastAPI + SQLite):
+
+1. Create database.py with SQLite database at ./data/crovest.db
+   Tables:
+   - tasks: id, title, description, status (todo/in_progress/done), priority, created_at, updated_at
+   - clients: id, name, email, project_status, last_contact, notes
+   - objectives: id, title, description, deadline, progress (0-100), month, year
+   - health_logs: id, bot_name, status, last_seen, uptime_seconds
+
+2. Create models.py with Pydantic models for all entities
+
+3. Create websocket.py with WebSocket endpoint for real-time log streaming
+   - Background task that tails log files from ~/logs/*.log
+   - Sends new log lines to all connected clients
+
+4. Create main.py with all REST endpoints:
+   - Tasks CRUD + status updates
+   - Clients CRUD
+   - Objectives CRUD with progress
+   - Health status endpoints
+   - WebSocket /ws/logs
+
+FRONTEND (React PWA):
+
+1. Create all React components:
+   - Sidebar with navigation
+   - LogStream with WebSocket connection
+   - TaskBoard (Kanban with drag-drop feel via buttons)
+   - ObjectivesTracker with progress bars
+   - ClientPortal with status badges
+   - HealthMonitor with online/offline indicators
+
+2. Create PWA files:
+   - manifest.json
+   - service-worker.js
+   - index.html
+
+3. Add responsive CSS for mobile
+
+Include sample data initialization. Make everything functional and working.
