@@ -144,19 +144,20 @@
         
         function renderTodos(todos) {
             const list = document.getElementById('todo-list');
-            if (todos.length === 0) {
+            if (!todos || todos.length === 0) {
                 list.innerHTML = '<li style="color: #64748b; text-align: center; padding: 20px;">No todos yet. Add one above!</li>';
                 return;
             }
-            list.innerHTML = todos.map(todo => `
-                <li class="todo-item ${todo.status === 'done' ? 'done' : ''}">
-                    <input type="checkbox" ${todo.status === 'done' ? 'checked' : ''} 
-                           onchange="toggleTodo(${todo.id}, '${todo.status === 'done' ? 'active' : 'done'}')">
-                    <span>${escapeHtml(todo.title)}</span>
-                    <span class="priority-${getPriority(todo.priority)}">●</span>
-                    <button onclick="deleteTodo(${todo.id})">Delete</button>
-                </li>
-            `).join('');
+            list.innerHTML = todos.map(todo => {
+                const isDone = todo.status === 'done';
+                const newStatus = isDone ? 'active' : 'done';
+                return '<li class="todo-item ' + (isDone ? 'done' : '') + '">' +
+                    '<input type="checkbox" ' + (isDone ? 'checked' : '') + ' onchange="toggleTodo(' + todo.id + ', \'' + newStatus + '\')">' +
+                    '<span>' + escapeHtml(todo.title) + '</span>' +
+                    '<span class="priority-' + getPriority(todo.priority) + '">●</span>' +
+                    '<button onclick="deleteTodo(' + todo.id + ')">Delete</button>' +
+                '</li>';
+            }).join('');
         }
         
         function getPriority(p) {
