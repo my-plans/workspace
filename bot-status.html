@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bot Status Monitor</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+        .container { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+        h1 { font-size: 2rem; font-weight: 700; background: linear-gradient(135deg, #3b82f6, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px; }
+        .subtitle { color: #64748b; margin-bottom: 32px; }
+        .grid { display: grid; gap: 16px; }
+        .bot-card { background: #1e293b; border-radius: 12px; padding: 20px; border: 1px solid #334155; display: flex; align-items: center; gap: 16px; }
+        .status-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+        .status-up { background: #22c55e; box-shadow: 0 0 10px #22c55e; }
+        .status-down { background: #ef4444; box-shadow: 0 0 10px #ef4444; }
+        .status-unknown { background: #64748b; }
+        .bot-info { flex: 1; }
+        .bot-name { font-weight: 600; font-size: 1.1rem; }
+        .bot-meta { color: #64748b; font-size: 0.875rem; margin-top: 4px; }
+        .timestamp { color: #475569; font-size: 0.75rem; }
+        footer { margin-top: 40px; text-align: center; color: #475569; font-size: 0.875rem; }
+        .refresh-btn { background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; margin-bottom: 20px; }
+        .refresh-btn:hover { background: #2563eb; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 Bot Status Monitor</h1>
+        <p class="subtitle">Real-time trading bot health dashboard</p>
+        
+        <button class="refresh-btn" onclick="fetchStatus()">Refresh</button>
+        
+        <div id="bot-grid" class="grid">
+            <div class="bot-card">
+                <div class="status-dot status-unknown"></div>
+                <div class="bot-info">
+                    <div class="bot-name">Loading...</div>
+                    <div class="bot-meta">Fetching bot status</div>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>Last updated: <span id="last-update">Never</span></p>
+        </footer>
+    </div>
+    
+    <script>
+        const API_URL = 'http://100.31.213.107:8765';
+        
+        async function fetchStatus() {
+            try {
+                const res = await fetch(API_URL + '/health');
+                if (!res.ok) throw new Error('Failed to fetch');
+                const data = await res.json();
+                renderBots(data);
+                document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+            } catch (err) {
+                document.getElementById('bot-grid').innerHTML = '<div class="bot-card"><div class="status-dot status-down"></div><div class="bot-info"><div class="bot-name">Monitor Offline</div><div class="bot-meta">Cannot connect to bot monitor API</div></div></div>';
+            }
+        }
+        
+        function renderBots(data) {
+            const grid = document.getElementById('bot-grid');
+            if (!data.bots || data.bots.length === 0) {
+                grid.innerHTML = '<div class="bot-card"><div class="status-dot status-unknown"></div><div class="bot-info"><div class="bot-name">No bots configured</div><div class="bot-meta">Add bots to config.yaml to monitor them</div></div></div>';
+                return;
+            }
+            
+            grid.innerHTML = data.bots.map(bot => {
+                const statusClass = bot.status === 'up' ? 'status-up' : bot.status === 'down' ? 'status-down' : 'status-unknown';
+                const statusText = bot.status === 'up' ? 'Online' : bot.status === 'down' ? 'Offline' : 'Unknown';
+                return '<div class="bot-card">' +
+                    '<div class="status-dot ' + statusClass + '"></div>' +
+                    '<div class="bot-info">' +
+                        '<div class="bot-name">' + escapeHtml(bot.name) + '</div>' +
+                        '<div class="bot-meta">' + statusText + ' • Last check: ' + (bot.last_check ? new Date(bot.last_check).toLocaleTimeString() : 'Never') + '</div>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        fetchStatus();
+        setInterval(fetchStatus, 30000); // Auto-refresh every 30s
+    </script>
+</body>
+</html>
