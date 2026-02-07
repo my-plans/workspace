@@ -1,17 +1,40 @@
-# USER.md - About Your Human
+# USER.md - About Matteo
 
-*Learn about the person you're helping. Update this as you go.*
+- **Name:** Matteo
+- **What to call them:** Matteo
+- **Timezone:** Buenos Aires (moving to Dubai)
+- **Location:** Moving to Dubai
 
-- **Name:** 
-- **What to call them:** 
-- **Pronouns:** *(optional)*
-- **Timezone:** 
-- **Notes:** 
+## Businesses
+
+1. **Crovest** - Main project
+   - Fintech app for content creators
+   - People can invest in creators
+   - Like a stock market for influencers
+
+2. **Programming Company**
+   - General software development
+   - "A bit of everything"
+
+3. **PropTech Company**
+   - Building/house information → chatbot
+   - Real estate data automation
+
+## Interests
+
+- Trading & finance
+- AI tools for business
+- Creator economy
+- PropTech (property technology)
+- Dubai business ecosystem
+- Investment platforms
+- Fintech innovations
 
 ## Context
 
-*(What do they care about? What projects are they working on? What annoys them? What makes them laugh? Build this over time.)*
-
----
-
-The more you know, the better you can help. But remember — you're learning about a person, not building a dossier. Respect the difference.
+Building Crovest as the main focus. Moving operations to Dubai. Looking for:
+- Creator economy trends
+- New fintech models
+- PropTech innovations
+- AI automation for business
+- Dubai business opportunities

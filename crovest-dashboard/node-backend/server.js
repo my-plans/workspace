@@ -89,6 +89,47 @@ async function initDB() {
       )
     `);
     
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS habits (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT DEFAULT '',
+        frequency TEXT DEFAULT 'daily',
+        streak INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS habit_logs (
+        id SERIAL PRIMARY KEY,
+        habit_id INTEGER REFERENCES habits(id) ON DELETE CASCADE,
+        completed_date DATE DEFAULT CURRENT_DATE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(habit_id, completed_date)
+      )
+    `);
+    
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS habits (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        frequency TEXT DEFAULT 'daily',
+        streak INTEGER DEFAULT 0,
+        completed_today BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS habit_logs (
+        id SERIAL PRIMARY KEY,
+        habit_id INTEGER REFERENCES habits(id),
+        date DATE DEFAULT CURRENT_DATE,
+        completed BOOLEAN DEFAULT false
+      )
+    `);
+    
     // Seed sample data if empty
     const todoCount = await client.query('SELECT COUNT(*) FROM todos');
     if (parseInt(todoCount.rows[0].count) === 0) {
@@ -264,6 +305,105 @@ app.post('/api/costs', async (req, res) => {
   }
 });
 
+app.delete('/api/costs/:id', async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM costs WHERE id=$1', [req.params.id]);
+    res.json({deleted: result.rowCount});
+  } catch (err) {
+    res.status(500).json({error: err.message});
+  }
+});
+
+// Habits API
+app.get('/api/habits', async (req, res) => {
+  try {
+    // Get all habits with their completion status for the current week
+    const result = await pool.query(`
+      SELECT h.*, 
+        COALESCE(json_agg(hl.completed_date) FILTER (WHERE hl.completed_date IS NOT NULL), '[]') as completed_dates
+      FROM habits h
+      LEFT JOIN habit_logs hl ON h.id = hl.habit_id 
+        AND hl.completed_date >= CURRENT_DATE - INTERVAL '7 days'
+      GROUP BY h.id
+      ORDER BY h.created_at DESC
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({error: err.message});
+  }
+});
+
+app.post('/api/habits', async (req, res) => {
+  const {name, description, frequency} = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO habits (name, description, frequency) VALUES ($1, $2, $3) RETURNING id',
+      [name, description || '', frequency || 'daily']
+    );
+    res.json({id: result.rows[0].id, status: 'created'});
+  } catch (err) {
+    res.status(500).json({error: err.message});
+  }
+});
+
+app.post('/api/habits/:id/checkin', async (req, res) => {
+  const {date} = req.body;
+  const checkDate = date || new Date().toISOString().split('T')[0];
+  try {
+    // Insert habit log
+    await pool.query(
+      'INSERT INTO habit_logs (habit_id, completed_date) VALUES ($1, $2) ON CONFLICT (habit_id, completed_date) DO NOTHING',
+      [req.params.id, checkDate]
+    );
+    
+    // Calculate new streak
+    await pool.query(`
+      UPDATE habits SET streak = (
+        SELECT COUNT(DISTINCT completed_date) FROM habit_logs 
+        WHERE habit_id = $1 
+        AND completed_date >= CURRENT_DATE - INTERVAL '30 days'
+      ) WHERE id = $1
+    `, [req.params.id]);
+    
+    res.json({status: 'checked in'});
+  } catch (err) {
+    res.status(500).json({error: err.message});
+  }
+});
+
+app.delete('/api/habits/:id/checkin', async (req, res) => {
+  const {date} = req.body;
+  const checkDate = date || new Date().toISOString().split('T')[0];
+  try {
+    await pool.query(
+      'DELETE FROM habit_logs WHERE habit_id=$1 AND completed_date=$2',
+      [req.params.id, checkDate]
+    );
+    
+    // Recalculate streak
+    await pool.query(`
+      UPDATE habits SET streak = (
+        SELECT COUNT(DISTINCT completed_date) FROM habit_logs 
+        WHERE habit_id = $1 
+        AND completed_date >= CURRENT_DATE - INTERVAL '30 days'
+      ) WHERE id = $1
+    `, [req.params.id]);
+    
+    res.json({status: 'unchecked'});
+  } catch (err) {
+    res.status(500).json({error: err.message});
+  }
+});
+
+app.delete('/api/habits/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM habits WHERE id=$1', [req.params.id]);
+    res.json({status: 'deleted'});
+  } catch (err) {
+    res.status(500).json({error: err.message});
+  }
+});
+
 // Tools API
 app.get('/api/tools', async (req, res) => {
   try {
@@ -348,6 +488,163 @@ app.post('/api/bot-logs', async (req, res) => {
       [bot_name, level || 'info', message]
     );
     res.json({id: result.rows[0].id, status: 'created'});
+  } catch (err) {
+    res.status(500).json({error: err.message});
+  }
+});
+
+// Habits API
+app.get('/api/habits', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM habits ORDER BY created_at DESC');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({error: err.message});
+  }
+});
+
+app.post('/api/habits', async (req, res) => {
+  const {name, frequency} = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO habits (name, frequency) VALUES ($1, $2) RETURNING id',
+      [name, frequency || 'daily']
+    );
+    res.json({id: result.rows[0].id, status: 'created'});
+  } catch (err) {
+    res.status(500).json({error: err.message});
+  }
+});
+
+app.post('/api/habits/:id/complete', async (req, res) => {
+  const {date} = req.body;
+  const habitId = req.params.id;
+  try {
+    // Mark habit as completed for today
+    await pool.query(
+      'INSERT INTO habit_logs (habit_id, date, completed) VALUES ($1, $2, true) ON CONFLICT (habit_id, date) DO UPDATE SET completed=true',
+      [habitId, date || new Date().toISOString().split('T')[0]]
+    );
+    
+    // Update streak
+    await pool.query(
+      'UPDATE habits SET streak = streak + 1, completed_today = true WHERE id = $1',
+      [habitId]
+    );
+    
+    res.json({status: 'completed'});
+  } catch (err) {
+    res.status(500).json({error: err.message});
+  }
+});
+
+app.delete('/api/habits/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM habit_logs WHERE habit_id = $1', [req.params.id]);
+    await pool.query('DELETE FROM habits WHERE id = $1', [req.params.id]);
+    res.json({deleted: 1});
+  } catch (err) {
+    res.status(500).json({error: err.message});
+  }
+});
+
+// Habits API
+app.get('/api/habits', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM habits ORDER BY created_at DESC');
+    const habits = result.rows;
+    
+    // Get completion data for current week
+    const days = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+    const today = new Date();
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - today.getDay());
+    
+    for (let habit of habits) {
+      const logs = await pool.query(
+        'SELECT completed_date FROM habit_logs WHERE habit_id=$1 AND completed_date >= $2',
+        [habit.id, weekStart.toISOString().split('T')[0]]
+      );
+      habit.week_completion = {};
+      days.forEach(d => habit.week_completion[d] = false);
+      logs.rows.forEach(log => {
+        const dayIdx = new Date(log.completed_date).getDay();
+        habit.week_completion[days[dayIdx]] = true;
+      });
+    }
+    
+    res.json(habits);
+  } catch (err) {
+    res.status(500).json({error: err.message});
+  }
+});
+
+app.post('/api/habits', async (req, res) => {
+  const {name, description} = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO habits (name, description) VALUES ($1, $2) RETURNING id',
+      [name, description || '']
+    );
+    res.json({id: result.rows[0].id, status: 'created'});
+  } catch (err) {
+    res.status(500).json({error: err.message});
+  }
+});
+
+app.delete('/api/habits/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM habit_logs WHERE habit_id=$1', [req.params.id]);
+    const result = await pool.query('DELETE FROM habits WHERE id=$1', [req.params.id]);
+    res.json({deleted: result.rowCount});
+  } catch (err) {
+    res.status(500).json({error: err.message});
+  }
+});
+
+app.post('/api/habits/:id/toggle', async (req, res) => {
+  const {day} = req.body; // day is 'mon', 'tue', etc.
+  const days = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  const dayIdx = days.indexOf(day);
+  if (dayIdx === -1) return res.status(400).json({error: 'Invalid day'});
+  
+  const today = new Date();
+  const targetDate = new Date(today);
+  targetDate.setDate(today.getDate() - (today.getDay() - dayIdx));
+  const dateStr = targetDate.toISOString().split('T')[0];
+  
+  try {
+    // Check if already completed
+    const existing = await pool.query(
+      'SELECT id FROM habit_logs WHERE habit_id=$1 AND completed_date=$2',
+      [req.params.id, dateStr]
+    );
+    
+    if (existing.rows.length > 0) {
+      // Delete (uncomplete)
+      await pool.query('DELETE FROM habit_logs WHERE id=$1', [existing.rows[0].id]);
+      // Update streak
+      await pool.query('UPDATE habits SET streak = GREATEST(0, streak - 1) WHERE id=$1', [req.params.id]);
+    } else {
+      // Add completion
+      await pool.query(
+        'INSERT INTO habit_logs (habit_id, completed_date) VALUES ($1, $2)',
+        [req.params.id, dateStr]
+      );
+      // Update streak
+      await pool.query('UPDATE habits SET streak = streak + 1 WHERE id=$1', [req.params.id]);
+    }
+    
+    res.json({status: 'toggled'});
+  } catch (err) {
+    res.status(500).json({error: err.message});
+  }
+});
+
+app.delete('/api/objectives/:id', async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM objectives WHERE id=$1', [req.params.id]);
+    res.json({deleted: result.rowCount});
   } catch (err) {
     res.status(500).json({error: err.message});
   }
